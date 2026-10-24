@@ -6,7 +6,7 @@ MYPY_FLAGS = --warn-return-any --warn-unused-ignores --ignore-missing-imports --
 .PHONY: install run debug clean lint lint-strict test
 
 install:
-	$(PYTHON) -m pip install flake8 mypy pytest
+	$(PYTHON) -m pip install flake8 mypy pytest pygame
 
 run:
 	$(PYTHON) main.py $(MAP) $(ARGS)

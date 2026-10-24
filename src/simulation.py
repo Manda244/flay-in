@@ -25,6 +25,7 @@ class Simulation:
             for number in range(1, fly_map.nb_drones + 1)
         ]
         self.turn: int = 0
+        self.history: list[list[tuple[str, str | None]]] = []
 
     def prepare(self) -> bool:
         """Give each drone a path.
@@ -147,6 +148,21 @@ class Simulation:
         moves.sort()
         return [text for _, text in moves]
 
+    def snapshot(self) -> list[tuple[str, str | None]]:
+        """Return where each drone is.
+
+        Returns:
+            For each drone, its zone name and the name of the zone it
+            is flying to (None if it is not in flight).
+        """
+        result: list[tuple[str, str | None]] = []
+        for drone in self.drones:
+            flying_to: str | None = None
+            if drone.in_transit_to is not None:
+                flying_to = drone.in_transit_to.name
+            result.append((drone.position.name, flying_to))
+        return result
+
     def run(self) -> list[str]:
         """Play turns until every drone is delivered.
 
@@ -159,9 +175,11 @@ class Simulation:
         if not self.prepare():
             raise SimulationError("no path from start to end")
         lines: list[str] = []
+        self.history = [self.snapshot()]
         while not self.all_delivered():
             moves = self.step()
             if not moves:
                 raise SimulationError("deadlock: no drone can move")
             lines.append(" ".join(moves))
+            self.history.append(self.snapshot())
         return lines

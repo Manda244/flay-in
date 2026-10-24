@@ -5,7 +5,7 @@ from pathlib import Path
 from src.fly_map import FlyMap
 from src.parser import MapParser
 
-MAPS = Path(__file__).resolve().parent.parent / "maps"
+MAPS = Path(__file__).resolve().parent / "maps"
 
 
 def write_map(tmp_path: Path, content: str) -> str:
