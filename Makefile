@@ -1,9 +1,10 @@
 PYTHON = python3
 MAP ?= maps/easy/01_linear_path.txt
-ARGS ?=
+ARGS ?= --gui
+LEVEL ?= easy
 MYPY_FLAGS = --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
 
-.PHONY: install run debug clean lint lint-strict test
+.PHONY: level install run debug clean lint lint-strict test
 
 install:
 	$(PYTHON) -m pip install flake8 mypy pytest pygame
@@ -28,3 +29,6 @@ lint-strict:
 
 test:
 	$(PYTHON) -m pytest -q
+
+level:
+	$(PYTHON) main.py --level=$(LEVEL) $(ARGS)

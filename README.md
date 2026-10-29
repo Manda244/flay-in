@@ -27,6 +27,8 @@ make install                      # install flake8, mypy and pytest
 make run                          # run on maps/subject_example.txt
 make run MAP=maps/diamond.txt     # choose another map
 make run ARGS=--visual            # describe the map before the turns
+make run ARGS=--gui                 # open the pygame window
+make level LEVEL=easy              # pick a map of a level
 make test                         # run the unit tests (pytest)
 make lint                         # flake8 and mypy
 make lint-strict                  # flake8 and mypy --strict (optional)
@@ -108,6 +110,20 @@ Colors are disabled automatically when the output is not a terminal
 (file, pipe), so the text always follows the format of the subject. A color
 name that is not known is printed without color.
 
+### Graphical mode
+
+`make run ARGS=--gui` opens a pygame window after the simulation. Each zone
+is a honeycomb cell filled with its `color`. The border shows the type of the
+zone (gold: priority, red: restricted, black: blocked) and the thickness of a
+connection shows its capacity. The drones are robot bees that fly from cell
+to cell, turn after turn, the queen waits on the end zone, and a counter shows
+the delivered drones. Keys: SPACE plays the next turn, A starts or stops the automatic
+replay, R restarts it, M opens a list to choose a
+map (N and P load the next or the previous one), ESC quits. The mouse wheel (or + and -) zooms toward the cursor, the arrow keys move the view when it is
+zoomed in, and the window can be resized.
+If the images of `assets/` are missing, simple shapes are drawn
+instead. `pygame` is only used for the display (`make install` installs it).
+
 ## Example input and output
 
 Input (`maps/subject_example.txt`, 5 drones):
@@ -164,6 +180,9 @@ src/pathfinder.py    PathFinder (BFS, Dijkstra, several paths)
 src/drone.py         Drone
 src/simulation.py    Simulation and SimulationError
 src/renderer.py      TerminalRenderer
+src/gui.py           GraphicRenderer (pygame window)
+src/validator.py     OutputValidator (checks the outputs)
+assets/              bee and queen images
 maps/                example and test maps
 tests/               pytest unit tests
 ~~~
@@ -179,6 +198,7 @@ tests/               pytest unit tests
 - `mypy` documentation: https://mypy.readthedocs.io
 - `flake8` documentation: https://flake8.pycqa.org
 - `pytest` documentation: https://docs.pytest.org
+- `pygame` documentation: https://www.pygame.org/docs/
 - ANSI escape codes: https://en.wikipedia.org/wiki/ANSI_escape_code
 
 ### How AI was used
@@ -189,7 +209,10 @@ An AI assistant (Claude, by Anthropic) was used as a step-by-step tutor:
 - to propose the class architecture and to write small pieces of code, each
   explained before it was used;
 - to help diagnose errors (indentation, `mypy` messages, test failures);
-- to draft the tests, the `Makefile` and this README.
+- to draft the tests, the `Makefile`, the output validator, the
+  pygame display and this README;
+- to remove the background of the two images of `assets/`, which
+  were provided by the author.
 
 Every piece of code was run and checked with `flake8`, `mypy` and `pytest`,
 and was read and understood by the author before being kept.
