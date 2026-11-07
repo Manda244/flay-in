@@ -1,0 +1,16 @@
+nb_drones: 6
+start_hub: s 0 0
+end_hub: g 4 0
+hub: h 1 0
+hub: r1 2 -1 [zone=restricted]
+hub: r2 2 0 [zone=restricted]
+hub: r3 2 1 [zone=restricted]
+hub: m 3 0
+connection: s-h
+connection: h-r1
+connection: h-r2
+connection: h-r3
+connection: r1-m
+connection: r2-m
+connection: r3-m
+connection: m-g

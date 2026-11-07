@@ -113,7 +113,9 @@ name that is not known is printed without color.
 ### Graphical mode
 
 `make run ARGS=--gui` opens a pygame window after the simulation. Each zone
-is a honeycomb cell filled with its `color`. The border shows the type of the
+is a honeycomb cell filled with its `color`, with a small badge that
+shows how many drones it can hold (an infinity sign for the start and
+end zones). The border shows the type of the
 zone (gold: priority, red: restricted, black: blocked) and the thickness of a
 connection shows its capacity. The drones are robot bees that fly from cell
 to cell, turn after turn, the queen waits on the end zone, and a counter shows

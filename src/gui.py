@@ -231,6 +231,52 @@ class GraphicRenderer:
             self.label_fonts[size] = pygame.font.Font(None, size)
         return self.label_fonts[size]
 
+    def font_of_size(self, size: int) -> pygame.font.Font:
+        """Return a font of the given size (fonts are kept for later).
+
+        Args:
+            size: The size of the font.
+
+        Returns:
+            The font.
+        """
+        if size not in self.label_fonts:
+            self.label_fonts[size] = pygame.font.Font(None, size)
+        return self.label_fonts[size]
+
+    def draw_capacity(
+        self, screen: pygame.Surface, zone: Zone, center: tuple[int, int]
+    ) -> None:
+        """Draw a badge with the number of drones the zone can hold.
+
+        The start and end zones have no limit, so they show an infinity
+        sign. A blocked zone has no badge.
+
+        Args:
+            screen: The window surface.
+            zone: The zone to describe.
+            center: The center of the zone, in pixels.
+        """
+        if zone.is_blocked():
+            return
+        radius = self.radius()
+        badge = max(int(radius * 0.32), 7)
+        x = center[0] + int(radius * 0.5)
+        y = center[1] - int(radius * 0.5)
+        pygame.draw.circle(screen, (30, 20, 10), (x, y), badge)
+        pygame.draw.circle(screen, (255, 235, 150), (x, y), badge, 1)
+        if zone is self.fly_map.start or zone is self.fly_map.end:
+            ring = max(badge // 3, 2)
+            for side in (-1, 1):
+                ring_center = (x + side * ring, y)
+                pygame.draw.circle(
+                    screen, (255, 255, 255), ring_center, ring, 1
+                )
+            return
+        font = self.font_of_size(max(int(badge * 1.7), 10))
+        number = font.render(str(zone.max_drones), True, (255, 255, 255))
+        screen.blit(number, number.get_rect(center=(x, y)))
+
     def draw_map(self, screen: pygame.Surface) -> None:
         """Draw the background, the connections and the zones.
 
@@ -264,6 +310,7 @@ class GraphicRenderer:
             )
             position = (center[0], center[1] + radius + 14)
             screen.blit(label, label.get_rect(center=position))
+            self.draw_capacity(screen, zone, center)
 
     def positions(self, snapshot: Snapshot) -> list[Point | None]:
         """Compute where each drone is drawn, in pixels.

@@ -5,6 +5,8 @@ from src.fly_map import FlyMap
 from src.pathfinder import PathFinder
 from src.zone import Zone, ZoneType
 
+Plan = tuple[int | None, bool]
+
 
 class SimulationError(Exception):
     """Raised when the simulation cannot be completed."""
@@ -13,6 +15,8 @@ class SimulationError(Exception):
 class Simulation:
     """Move all the drones from the start zone to the end zone."""
 
+    PLANS: tuple[Plan, ...] = ((None, False), (2, True), (6, True), (20, True))
+
     def __init__(self, fly_map: FlyMap) -> None:
         """Create the drones, all waiting in the start zone.
 
@@ -20,24 +24,39 @@ class Simulation:
             fly_map: The map to simulate.
         """
         self.fly_map: FlyMap = fly_map
-        self.drones: list[Drone] = [
-            Drone(number, fly_map.start)
-            for number in range(1, fly_map.nb_drones + 1)
-        ]
+        self.drones: list[Drone] = []
         self.turn: int = 0
         self.history: list[list[tuple[str, str | None]]] = []
+        self.reset()
 
-    def prepare(self) -> bool:
-        """Give each drone a path.
+    def reset(self) -> None:
+        """Put all the drones back in the start zone."""
+        self.drones = [
+            Drone(number, self.fly_map.start)
+            for number in range(1, self.fly_map.nb_drones + 1)
+        ]
+        self.turn = 0
+        self.history = []
+
+    def prepare(
+        self, penalty: int | None = None, spacing_aware: bool = False
+    ) -> bool:
+        """Give a path to every drone.
+
+        Args:
+            penalty: The extra cost of the zones already used by another
+                path, or None to forbid sharing zones.
+            spacing_aware: True to estimate the turns between two drones.
 
         Returns:
             True if a path exists, False otherwise.
         """
-        paths = PathFinder(self.fly_map).plan_paths(len(self.drones))
-        if not paths:
+        finder = PathFinder(self.fly_map)
+        plan = finder.plan_paths(len(self.drones), penalty, spacing_aware)
+        if not plan:
             return False
         for drone in self.drones:
-            drone.assign_path(paths[drone.drone_id - 1])
+            drone.assign_path(plan[drone.drone_id - 1])
         return True
 
     def all_delivered(self) -> bool:
@@ -99,6 +118,21 @@ class Simulation:
         key = frozenset((source.name, target.name))
         return link_usage.get(key, 0) < connection.max_link_capacity
 
+    def snapshot(self) -> list[tuple[str, str | None]]:
+        """Return where each drone is.
+
+        Returns:
+            For each drone, its zone name and the name of the zone it
+            is flying to (None if it is not in flight).
+        """
+        result: list[tuple[str, str | None]] = []
+        for drone in self.drones:
+            flying_to: str | None = None
+            if drone.in_transit_to is not None:
+                flying_to = drone.in_transit_to.name
+            result.append((drone.position.name, flying_to))
+        return result
+
     def step(self) -> list[str]:
         """Play one turn, respecting zone and connection capacities.
 
@@ -148,23 +182,14 @@ class Simulation:
         moves.sort()
         return [text for _, text in moves]
 
-    def snapshot(self) -> list[tuple[str, str | None]]:
-        """Return where each drone is.
+    def play(
+        self, penalty: int | None = None, spacing_aware: bool = False
+    ) -> list[str]:
+        """Play a whole simulation with one way of choosing the paths.
 
-        Returns:
-            For each drone, its zone name and the name of the zone it
-            is flying to (None if it is not in flight).
-        """
-        result: list[tuple[str, str | None]] = []
-        for drone in self.drones:
-            flying_to: str | None = None
-            if drone.in_transit_to is not None:
-                flying_to = drone.in_transit_to.name
-            result.append((drone.position.name, flying_to))
-        return result
-
-    def run(self) -> list[str]:
-        """Play turns until every drone is delivered.
+        Args:
+            penalty: See prepare.
+            spacing_aware: See prepare.
 
         Returns:
             One line of text per turn.
@@ -172,7 +197,8 @@ class Simulation:
         Raises:
             SimulationError: If there is no path, or if no drone can move.
         """
-        if not self.prepare():
+        self.reset()
+        if not self.prepare(penalty, spacing_aware):
             raise SimulationError("no path from start to end")
         lines: list[str] = []
         self.history = [self.snapshot()]
@@ -183,3 +209,38 @@ class Simulation:
             lines.append(" ".join(moves))
             self.history.append(self.snapshot())
         return lines
+
+    def run(self) -> list[str]:
+        """Try several ways of choosing the paths and keep the fastest.
+
+        The first way is the one that never shares a zone between paths.
+        In case of a tie, the earliest way is kept.
+
+        Returns:
+            One line of text per turn.
+
+        Raises:
+            SimulationError: If there is no path, or if no way works.
+        """
+        best: list[str] | None = None
+        kept = (self.drones, self.history)
+        first_error: SimulationError | None = None
+        for penalty, spacing_aware in self.PLANS:
+            try:
+                lines = self.play(penalty, spacing_aware)
+            except SimulationError as error:
+                if str(error).startswith("no path"):
+                    raise
+                if first_error is None:
+                    first_error = error
+                continue
+            if best is None or len(lines) < len(best):
+                best = lines
+                kept = (self.drones, self.history)
+        if best is None:
+            if first_error is not None:
+                raise first_error
+            raise SimulationError("no plan worked")
+        self.drones, self.history = kept
+        self.turn = len(best)
+        return best
