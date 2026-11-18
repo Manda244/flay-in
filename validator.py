@@ -1,8 +1,8 @@
 """Independent checker of simulation outputs."""
 
-from src.connection import Connection
-from src.fly_map import FlyMap
-from src.zone import Zone, ZoneType
+from connection import Connection
+from fly_map import FlyMap
+from zone import Zone, ZoneType
 
 
 class ValidationError(Exception):

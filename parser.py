@@ -1,6 +1,6 @@
-from src.fly_map import FlyMap
-from src.connection import Connection
-from src.zone import Zone, ZoneType
+from fly_map import FlyMap
+from connection import Connection
+from zone import Zone, ZoneType
 
 
 class ParseError(Exception):
@@ -89,10 +89,10 @@ class MapParser:
         return main.strip(), metadata
 
     def to_int(self, value: str, label: str, line_number: int) -> int:
-        """Convert a text to an integer.
+        """Convert a text to an integer (digits only, optional leading '-').
 
         Args:
-            value: The text to convert, such as "12".
+            value: The text to convert, such as "12" or "-3".
             label: Name of the value, used in the error message.
             line_number: Line number, used in error messages.
 
@@ -100,14 +100,14 @@ class MapParser:
             The integer value.
 
         Raises:
-            ParseError: If the text is not a valid integer.
+            ParseError: If the text is not made only of digits.
         """
-        try:
-            return int(value)
-        except ValueError:
+        digits = value[1:] if value.startswith("-") else value
+        if not (digits.isascii() and digits.isdigit()):
             raise ParseError(
                 f"{label} must be an integer, got '{value}'", line_number
-            ) from None
+            )
+        return int(value)
 
     def to_positive_int(
         self, value: str, label: str, line_number: int

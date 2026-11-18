@@ -3,8 +3,8 @@
 import heapq
 from collections import deque
 
-from src.fly_map import FlyMap
-from src.zone import Zone, ZoneType
+from fly_map import FlyMap
+from zone import Zone, ZoneType
 
 
 class PathFinder:
@@ -21,6 +21,9 @@ class PathFinder:
         self.fly_map: FlyMap = fly_map
         self.banned: set[str] = set()
         self.penalty: dict[str, int] = {}
+        self.cache: dict[
+            tuple[int, int | None], list[list[Zone]]
+        ] = {}
 
     def find_path(self) -> list[Zone] | None:
         """Find the path with the fewest steps from start to end.
@@ -117,12 +120,27 @@ class PathFinder:
         """
         return sum(zone.cost() for zone in path[1:])
 
+    def zone_gap(self, source: Zone, target: Zone) -> int:
+        """Return the turns to wait between two drones entering target.
+
+        Args:
+            source: The zone the drones come from.
+            target: The zone the drones enter.
+
+        Returns:
+            The minimum gap in turns (at least 1).
+        """
+        capacity = 1
+        connection = self.fly_map.get_connection(source, target)
+        if connection is not None:
+            capacity = connection.max_link_capacity
+        if target is not self.fly_map.end:
+            capacity = min(capacity, target.max_drones)
+        hold = 2 if target.zone_type == ZoneType.RESTRICTED else 1
+        return -(-hold // capacity)
+
     def path_spacing(self, path: list[Zone]) -> int:
         """Return the turns between two drones that follow each other.
-
-        A restricted zone keeps its connection and its place busy for two
-        turns, so with a capacity of 1 only one drone can pass every two
-        turns.
 
         Args:
             path: The zones of the path, from start to end.
@@ -132,14 +150,7 @@ class PathFinder:
         """
         spacing = 1
         for source, target in zip(path, path[1:]):
-            capacity = 1
-            connection = self.fly_map.get_connection(source, target)
-            if connection is not None:
-                capacity = connection.max_link_capacity
-            if target is not self.fly_map.end:
-                capacity = min(capacity, target.max_drones)
-            hold = 2 if target.zone_type == ZoneType.RESTRICTED else 1
-            spacing = max(spacing, -(-hold // capacity))
+            spacing = max(spacing, self.zone_gap(source, target))
         return spacing
 
     def find_paths(
@@ -149,8 +160,8 @@ class PathFinder:
 
         After each path, its intermediate zones are either banned (no
         share_penalty) or made more expensive (share_penalty), so the next
-        path prefers other zones. With a penalty, zones that cannot be
-        avoided can still be shared.
+        path prefers other zones. Results are kept in a cache. The
+        returned list must not be modified.
 
         Args:
             max_paths: The maximum number of paths to return.
@@ -160,6 +171,9 @@ class PathFinder:
         Returns:
             The different paths found.
         """
+        key = (max_paths, share_penalty)
+        if key in self.cache:
+            return self.cache[key]
         paths: list[list[Zone]] = []
         self.banned = set()
         self.penalty = {}
@@ -178,6 +192,7 @@ class PathFinder:
                     self.penalty[zone.name] = used + share_penalty
         self.banned = set()
         self.penalty = {}
+        self.cache[key] = paths
         return paths
 
     def plan_paths(
@@ -188,14 +203,17 @@ class PathFinder:
     ) -> list[list[Zone]]:
         """Choose a path for each drone.
 
-        Each drone takes the path where it is expected to arrive first,
-        counting the drones already sent on that path.
+        Without spacing_aware, each drone takes the path where it is
+        expected to arrive first, counting one turn for each drone
+        already sent on that path. With spacing_aware, the places used
+        by each drone are reserved turn by turn, so paths that share
+        zones are not counted as independent.
 
         Args:
             nb_drones: The number of drones to route.
             share_penalty: See find_paths.
-            spacing_aware: True to count the turns needed between two drones
-                on each path, instead of one turn.
+            spacing_aware: True to reserve the places used by each drone
+                (see arrival_time), False for the simple count.
 
         Returns:
             One path per drone (drone n uses item n - 1), or an empty
@@ -207,17 +225,73 @@ class PathFinder:
         paths = self.find_paths(limit, share_penalty)
         if not paths:
             return []
-        costs = [self.path_cost(path) for path in paths]
-        gaps = [
-            self.path_spacing(path) if spacing_aware else 1 for path in paths
-        ]
-        sent = [0] * len(paths)
         plan: list[list[Zone]] = []
+        if spacing_aware:
+            usage: dict[tuple[str, int], int] = {}
+            for _ in range(nb_drones):
+                best_path = min(
+                    paths,
+                    key=lambda p: self.arrival_time(p, usage, False),
+                )
+                self.arrival_time(best_path, usage, True)
+                plan.append(best_path)
+            return plan
+        costs = [self.path_cost(path) for path in paths]
+        sent = [0] * len(paths)
         for _ in range(nb_drones):
-            best = min(
-                range(len(paths)),
-                key=lambda i: costs[i] + sent[i] * gaps[i],
-            )
+            best = min(range(len(paths)), key=lambda i: costs[i] + sent[i])
             sent[best] += 1
             plan.append(paths[best])
         return plan
+
+    def arrival_time(
+        self,
+        path: list[Zone],
+        usage: dict[tuple[str, int], int],
+        commit: bool,
+    ) -> int:
+        """Return the turn a new drone reaches the end of a path.
+
+        A drone keeps its connection busy during every turn of the move
+        and keeps its zone busy while it waits there.
+
+        Args:
+            path: The zones of the path, from start to end.
+            usage: For each (name, turn), the drones present then. A name
+                is a zone name or "zone1-zone2" for a connection.
+            commit: True to reserve the places in usage.
+
+        Returns:
+            The arrival turn of the drone at the end zone.
+        """
+        time = 0
+        booked: list[tuple[str, int]] = []
+        for source, target in zip(path, path[1:]):
+            cost = target.cost()
+            link = self.fly_map.get_connection(source, target)
+            link_capacity = link.max_link_capacity if link else 1
+            link_name = "-".join(sorted((source.name, target.name)))
+            depart = time
+            while True:
+                busy = any(
+                    usage.get((link_name, turn), 0) >= link_capacity
+                    for turn in range(depart + 1, depart + cost + 1)
+                )
+                full = (
+                    target is not self.fly_map.end
+                    and usage.get((target.name, depart + cost), 0)
+                    >= target.max_drones
+                )
+                if not (busy or full):
+                    break
+                depart += 1
+            if source is not self.fly_map.start:
+                for turn in range(time, depart + 1):
+                    booked.append((source.name, turn))
+            for turn in range(depart + 1, depart + cost + 1):
+                booked.append((link_name, turn))
+            time = depart + cost
+        if commit:
+            for key in booked:
+                usage[key] = usage.get(key, 0) + 1
+        return time

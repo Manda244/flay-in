@@ -1,9 +1,9 @@
 """Turn-by-turn simulation for the Fly-in project."""
 
-from src.drone import Drone
-from src.fly_map import FlyMap
-from src.pathfinder import PathFinder
-from src.zone import Zone, ZoneType
+from drone import Drone
+from fly_map import FlyMap
+from pathfinder import PathFinder
+from zone import Zone, ZoneType
 
 Plan = tuple[int | None, bool]
 

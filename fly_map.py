@@ -1,7 +1,7 @@
 """Graph of zones and connections for the Fly-in project."""
 
-from src.connection import Connection
-from src.zone import Zone
+from connection import Connection
+from zone import Zone
 
 
 class FlyMap:

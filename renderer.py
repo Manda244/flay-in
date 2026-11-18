@@ -1,7 +1,7 @@
 """Colored terminal display for the Fly-in project."""
 
-from src.fly_map import FlyMap
-from src.zone import Zone
+from fly_map import FlyMap
+from zone import Zone
 
 
 class TerminalRenderer:

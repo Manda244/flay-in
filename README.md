@@ -121,7 +121,7 @@ connection shows its capacity. The drones are robot bees that fly from cell
 to cell, turn after turn, the queen waits on the end zone, and a counter shows
 the delivered drones. Keys: SPACE plays the next turn, A starts or stops the automatic
 replay, R restarts it, M opens a list to choose a
-map (N and P load the next or the previous one), ESC quits. The mouse wheel (or + and -) zooms toward the cursor, the arrow keys move the view when it is
+map (N and P load the next or the previous one), ESC quits. The mouse wheel (or + and -) zooms in, the arrow keys move the view when it is
 zoomed in, and the window can be resized.
 If the images of `assets/` are missing, simple shapes are drawn
 instead. `pygame` is only used for the display (`make install` installs it).
@@ -174,16 +174,16 @@ The subject does not specify everything. The choices made are:
 
 ~~~
 main.py              entry point
-src/zone.py          Zone and ZoneType
-src/connection.py    Connection
-src/fly_map.py       FlyMap (graph with adjacency lists)
-src/parser.py        MapParser and ParseError
-src/pathfinder.py    PathFinder (BFS, Dijkstra, several paths)
-src/drone.py         Drone
-src/simulation.py    Simulation and SimulationError
-src/renderer.py      TerminalRenderer
-src/gui.py           GraphicRenderer (pygame window)
-src/validator.py     OutputValidator (checks the outputs)
+zone.py               Zone and ZoneType
+connection.py         Connection
+fly_map.py            FlyMap (graph with adjacency lists)
+parser.py             MapParser and ParseError
+pathfinder.py         PathFinder (BFS, Dijkstra, several paths)
+drone.py              Drone
+simulation.py         Simulation and SimulationError
+renderer.py           TerminalRenderer
+gui.py                GraphicRenderer (pygame window)
+validator.py          OutputValidator (checks the outputs)
 assets/              bee and queen images
 maps/                example and test maps
 tests/               pytest unit tests

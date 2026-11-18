@@ -1,6 +1,6 @@
 """Drone class for the Fly-in project."""
 
-from src.zone import Zone
+from zone import Zone
 
 
 class Drone:
