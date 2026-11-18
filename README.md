@@ -1,4 +1,4 @@
-*This project has been created as part of the 42 curriculum by <login1>[, <login2>[, <login3>]].*
+*This project has been created as part of the 42 curriculum by marasolo.*
 
 # Fly-in
 
@@ -44,8 +44,10 @@ The project contains a parser with strict validation, a simulation engine, an in
 ### Installation
 
 ```bash
-python3 -m pip install pygame
+make install
 ```
+
+This installs `flake8`, `mypy` and `pygame` with `pip`. Only `pygame` is needed to run the program (for `--gui`); the other two are used by the lint rules.
 
 ### Execution
 
@@ -55,6 +57,25 @@ python3 main.py <map_file> [--gui]
 
 - `<map_file>`: path to a map file (exactly one is required).
 - `--gui`: also opens the graphical replay after printing the turns.
+
+### Makefile rules
+
+| Rule | Description |
+|---|---|
+| `make install` | Install `flake8`, `mypy` and `pygame` |
+| `make run` | Run the program on `$(MAP)` (terminal output only) |
+| `make run-visual` | Run the program on `$(MAP)` with the extra arguments `$(ARGS)` (default `--gui`) |
+| `make debug` | Run the program under `pdb` |
+| `make lint` | Run `flake8` and `mypy` with the standard flags |
+| `make lint-strict` | Run `flake8` and `mypy --strict` |
+| `make clean` | Remove `__pycache__`, `.mypy_cache` and `.pytest_cache` |
+
+The default map is `maps/easy/01_linear_path.txt`. Use another one with:
+
+```bash
+make run MAP=maps/easy/02_simple_fork.txt
+make run-visual MAP=maps/easy/01_linear_path.txt
+```
 
 On an invalid map, or when no solution exists, the program prints `Error: <message>` and exits with status 1.
 
@@ -162,41 +183,55 @@ A resizable pygame window replays the simulation:
 | Arrow keys | Move the view when zoomed |
 | `ESC` | Quit |
 
+Example: the replay of `maps/easy/01_linear_path.txt` at turn 0 (`make run-visual MAP=maps/easy/01_linear_path.txt`).
+
+![Graphical replay of 01_linear_path at turn 0](docs/screenshots/01_linear_path.png)
+
 These features make the behavior of the algorithm easy to follow: bottlenecks, queues and the use of alternative routes are visible instead of being read from text only.
 
 ## Example
 
-### Example 1: simple corridor
+### Example 1: linear path
 
-Input (`corridor.txt`):
+Input (`maps/easy/01_linear_path.txt`):
 
 ```
 nb_drones: 2
 start_hub: start 0 0 [color=green]
-hub: a 1 0 [color=blue]
-hub: b 2 0 [color=yellow]
+hub: waypoint1 1 0 [color=blue]
+hub: waypoint2 2 0 [color=blue]
 end_hub: goal 3 0 [color=red]
-connection: start-a
-connection: a-b
-connection: b-goal
+connection: start-waypoint1
+connection: waypoint1-waypoint2
+connection: waypoint2-goal
 ```
 
 Command:
 
 ```bash
-python3 main.py corridor.txt
+make run MAP=maps/easy/01_linear_path.txt
 ```
 
 Expected output:
 
 ```
-D1-a
-D1-b D2-a
-D1-goal D2-b
+D1-waypoint1
+D1-waypoint2 D2-waypoint1
+D1-goal D2-waypoint2
 D2-goal
 ```
 
-Zones `a` and `b` hold one drone at a time, so the drones follow each other: 4 turns.
+Each waypoint holds one drone at a time (the badge `1` in the window), so the two drones follow each other: 4 turns.
+
+Command with the graphical replay:
+
+```bash
+make run-visual MAP=maps/easy/01_linear_path.txt
+```
+
+![Graphical replay of 01_linear_path at turn 0](01_linear_path.png)
+
+*Turn 0/4: both drones wait in the green start zone (drone image), the blue waypoints show their capacity badge, the red zone is the goal. The status bar shows the map, the turn, the delivered drones and the zoom, and the second line lists the keys.*
 
 ### Example 2: restricted zone
 
@@ -251,4 +286,4 @@ AI was used as an assistant for the following tasks:
 - reviewing the code and pointing out possible improvements;
 - drafting this README.
 
-All code was written, tested and understood by the authors. <!-- Adjust this section so it matches how AI was really used in your project. -->
+All code was written, tested and understood by the authors.

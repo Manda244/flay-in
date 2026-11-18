@@ -20,11 +20,11 @@ clean:
 	rm -rf .mypy_cache .pytest_cache
 
 lint:
-	flake8 .
-	mypy . $(MYPY_FLAGS)
+	flake8 . --extend-exclude=.venv,venv,__pycache__
+	mypy . $(MYPY_FLAGS) --exclude '(^|/)(\.venv|venv|__pycache__)/'
 
 lint-strict:
-	flake8 .
-	mypy . --strict
+	flake8 . --extend-exclude=.venv,venv,__pycache__
+	mypy . --strict --exclude '(^|/)(\.venv|venv|__pycache__)/'
 
 .PHONY: install run debug clean lint lint-strict
