@@ -322,8 +322,7 @@ class GraphicRenderer:
     ) -> None:
         """Draw a badge with the number of drones the zone can hold.
 
-        The start and end zones have no limit (infinity sign), and a
-        blocked zone has no badge.
+        The start zone, the end zone and the blocked zones have no badge.
 
         Args:
             screen: The window surface.
@@ -333,19 +332,13 @@ class GraphicRenderer:
         """
         if zone.is_blocked():
             return
+        if zone is self.fly_map.start or zone is self.fly_map.end:
+            return
         badge = max(int(radius * 0.32), 7)
         x = center[0] + int(radius * 0.5)
         y = center[1] - int(radius * 0.5)
         pygame.draw.circle(screen, (30, 20, 10), (x, y), badge)
         pygame.draw.circle(screen, (255, 235, 150), (x, y), badge, 1)
-        if zone is self.fly_map.start or zone is self.fly_map.end:
-            ring = max(badge // 3, 2)
-            for side in (-1, 1):
-                ring_center = (x + side * ring, y)
-                pygame.draw.circle(
-                    screen, (255, 255, 255), ring_center, ring, 1
-                )
-            return
         font = self.font(max(int(badge * 1.7), 10))
         number = font.render(str(zone.max_drones), True, (255, 255, 255))
         screen.blit(number, number.get_rect(center=(x, y)))
@@ -364,9 +357,6 @@ class GraphicRenderer:
         points: list[Point | None] = []
         for place, flying_to in snapshot:
             zone = self.fly_map.zones[place]
-            if zone is self.fly_map.end:
-                points.append(None)
-                continue
             x, y = self.to_screen(zone)
             if flying_to is not None:
                 other_x, other_y = self.to_screen(
@@ -376,7 +366,8 @@ class GraphicRenderer:
                 continue
             rank = counters.get(place, 0)
             counters[place] = rank + 1
-            distance = 4.5 * math.sqrt(rank) * factor
+            spread = 9.0 if zone is self.fly_map.end else 4.5
+            distance = spread * math.sqrt(rank) * factor
             angle = rank * 2.4
             points.append((
                 x + distance * math.cos(angle),
@@ -398,13 +389,14 @@ class GraphicRenderer:
         end_x, end_y = self.to_screen(self.fly_map.end)
         smooth = replay.progress * replay.progress * (3 - 2 * replay.progress)
         drone = self.drone_image()
-        for before, after in zip(now, later):
+        for index, (before, after) in enumerate(zip(now, later)):
             if before is None:
                 continue
             goal = after if after is not None else (float(end_x), float(end_y))
             x = before[0] + (goal[0] - before[0]) * smooth
             y = before[1] + (goal[1] - before[1]) * smooth
-            center = (int(x), int(y))
+            bob = math.sin(pygame.time.get_ticks() / 250 + index) * 4
+            center = (int(x), int(y + bob * self.size_factor()))
             if drone is None:
                 radius = max(int(10 * self.size_factor()), 3)
                 pygame.draw.circle(screen, (20, 20, 20), center, radius)

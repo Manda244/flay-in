@@ -44,6 +44,7 @@ class MapParser:
         self.link_keys: set[frozenset[str]] = set()
         self.start: Zone | None = None
         self.end: Zone | None = None
+        self.positions: dict[tuple[int, int], str] = {}
 
     def split_metadata(
             self, text: str, line_number: int
@@ -67,6 +68,10 @@ class MapParser:
                 raise ParseError("unexpected ']'", line_number)
             return text.strip(), {}
         main, _, rest = text.partition("[")
+        if main and not main[-1].isspace():
+            raise ParseError(
+                "a space is needed before '['", line_number
+            )
         rest = rest.strip()
         if not rest.endswith("]"):
             raise ParseError("metadata must end with ']'", line_number)
@@ -204,6 +209,11 @@ class MapParser:
                 "a connection must look like zone1-zone2 (no spaces)",
                 line_number,
             )
+        if names[0] == names[1]:
+            raise ParseError(
+                f"zone '{names[0]}' cannot be connected to itself",
+                line_number,
+            )
         for name in names:
             if name not in zones:
                 raise ParseError(f"unknown zone '{name}'", line_number)
@@ -229,10 +239,22 @@ class MapParser:
             ParseError: If the zone is invalid or already defined.
         """
         zone = self.parse_zone(text, line_number)
+        if prefix in ("start_hub", "end_hub") and zone.is_blocked():
+            raise ParseError(
+                f"{prefix} cannot be a blocked zone", line_number
+            )
         if zone.name in self.zones:
             raise ParseError(
                 f"zone '{zone.name}' is already defined", line_number
             )
+        position = (zone.x, zone.y)
+        if position in self.positions:
+            raise ParseError(
+                f"zone '{zone.name}' has the same coordinates as "
+                f"'{self.positions[position]}'",
+                line_number,
+            )
+        self.positions[position] = zone.name
         if prefix == "start_hub":
             if self.start is not None:
                 raise ParseError("only one start_hub is allowed", line_number)

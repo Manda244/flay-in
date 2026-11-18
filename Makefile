@@ -3,10 +3,8 @@ MAP ?= maps/easy/01_linear_path.txt
 ARGS ?= --gui
 MYPY_FLAGS = --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
 
-.PHONY: install run debug clean lint lint-strict
-
 install:
-	$(PYTHON) -m pip install flake8 mypy pytest pygame
+	$(PYTHON) -m pip install flake8 mypy pygame
 
 run:
 	$(PYTHON) main.py $(MAP)
@@ -28,3 +26,5 @@ lint:
 lint-strict:
 	flake8 .
 	mypy . --strict
+
+.PHONY: install run debug clean lint lint-strict
