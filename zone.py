@@ -47,12 +47,6 @@ class Zone:
         """Return whether the zone is blocked."""
         return self.zone_type == ZoneType.BLOCKED
 
-    def __repr__(self) -> str:
-        """Return a readable representation of the zone."""
-        return f"Zone(name={self.name}, x={self.x}, y={self.y}, " \
-            f"zone_type={self.zone_type}, color={self.color}, " \
-            f"max_drones={self.max_drones})"
-
     def cost(self) -> int:
         """Return the number of turns needed to enter this zone.
 

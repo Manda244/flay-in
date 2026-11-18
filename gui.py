@@ -118,14 +118,13 @@ class GraphicRenderer:
         self.height: int = self.HEIGHT
         self.title: str = ""
         self.drone_source: pygame.Surface | None = None
+        self.drone_cache: tuple[int, pygame.Surface] | None = None
         self.font_cache: dict[int, pygame.font.Font] = {}
         self.running: bool = True
         self.set_map(fly_map)
 
-    # ----- the view: where each zone is on the screen -----
-
     def set_map(self, fly_map: FlyMap) -> None:
-        """Prepare the view of a map (also used to change the map).
+        """Prepare the view of a map.
 
         Args:
             fly_map: The map to draw.
@@ -194,8 +193,6 @@ class GraphicRenderer:
             self.font_cache[size] = pygame.font.Font(None, size)
         return self.font_cache[size]
 
-    # ----- zoom and move -----
-
     def zoom_by(self, factor: float) -> None:
         """Zoom in (factor above 1) or out, between x1 and x8.
 
@@ -229,8 +226,6 @@ class GraphicRenderer:
             self.pan_y -= amount
         self.clamp_pan()
 
-    # ----- images -----
-
     def load_images(self) -> None:
         """Load the drone image (circles are used if it is missing)."""
         self.drone_source = self.load_image(Path("drone.png"))
@@ -245,17 +240,22 @@ class GraphicRenderer:
     def drone_image(self) -> pygame.Surface | None:
         """Return the drone image at the right size.
 
+        The resized image is kept, and made again only when the size
+        changes (zoom or window size).
+
         Returns:
             The image, or None if there is no drone image.
         """
         if self.drone_source is None:
             return None
         width = max(int(self.DRONE_WIDTH * self.size_factor()), 4)
+        if self.drone_cache is not None and self.drone_cache[0] == width:
+            return self.drone_cache[1]
         ratio = self.drone_source.get_height() / self.drone_source.get_width()
         size = (width, max(int(width * ratio), 4))
-        return pygame.transform.smoothscale(self.drone_source, size)
-
-    # ----- drawing -----
+        image = pygame.transform.smoothscale(self.drone_source, size)
+        self.drone_cache = (width, image)
+        return image
 
     def draw(
         self, screen: pygame.Surface, replay: Replay, fonts: Fonts
@@ -277,6 +277,7 @@ class GraphicRenderer:
 
     def draw_connections(self, screen: pygame.Surface) -> None:
         """Draw the connections (thicker when the capacity is bigger)."""
+        factor = self.size_factor()
         for connection in self.fly_map.connections:
             base = min(2 + 2 * connection.max_link_capacity, 12)
             pygame.draw.line(
@@ -284,7 +285,7 @@ class GraphicRenderer:
                 (200, 160, 80),
                 self.to_screen(connection.zone_a),
                 self.to_screen(connection.zone_b),
-                max(int(base * self.size_factor()), 1),
+                max(int(base * factor), 1),
             )
 
     def draw_zone(self, screen: pygame.Surface, zone: Zone) -> None:
@@ -343,18 +344,18 @@ class GraphicRenderer:
         number = font.render(str(zone.max_drones), True, (255, 255, 255))
         screen.blit(number, number.get_rect(center=(x, y)))
 
-    def positions(self, snapshot: Snapshot) -> list[Point | None]:
+    def positions(self, snapshot: Snapshot) -> list[Point]:
         """Compute where each drone is drawn, in pixels.
 
         Args:
             snapshot: For each drone, its zone and the zone it flies to.
 
         Returns:
-            One point per drone, or None for a delivered drone.
+            One point per drone.
         """
         factor = self.size_factor()
         counters: dict[str, int] = {}
-        points: list[Point | None] = []
+        points: list[Point] = []
         for place, flying_to in snapshot:
             zone = self.fly_map.zones[place]
             x, y = self.to_screen(zone)
@@ -386,19 +387,17 @@ class GraphicRenderer:
         after_index = min(replay.index + 1, len(history) - 1)
         now = self.positions(history[replay.index])
         later = self.positions(history[after_index])
-        end_x, end_y = self.to_screen(self.fly_map.end)
         smooth = replay.progress * replay.progress * (3 - 2 * replay.progress)
         drone = self.drone_image()
+        factor = self.size_factor()
+        ticks = pygame.time.get_ticks()
         for index, (before, after) in enumerate(zip(now, later)):
-            if before is None:
-                continue
-            goal = after if after is not None else (float(end_x), float(end_y))
-            x = before[0] + (goal[0] - before[0]) * smooth
-            y = before[1] + (goal[1] - before[1]) * smooth
-            bob = math.sin(pygame.time.get_ticks() / 250 + index) * 4
-            center = (int(x), int(y + bob * self.size_factor()))
+            x = before[0] + (after[0] - before[0]) * smooth
+            y = before[1] + (after[1] - before[1]) * smooth
+            bob = math.sin(ticks / 250 + index) * 4
+            center = (int(x), int(y + bob * factor))
             if drone is None:
-                radius = max(int(10 * self.size_factor()), 3)
+                radius = max(int(10 * factor), 3)
                 pygame.draw.circle(screen, (20, 20, 20), center, radius)
                 pygame.draw.circle(screen, (255, 210, 40), center, radius - 2)
             else:
@@ -431,8 +430,6 @@ class GraphicRenderer:
         screen.blit(fonts[0].render(status, True, (255, 255, 255)), (15, 12))
         help_image = fonts[1].render(help_text, True, (220, 200, 160))
         screen.blit(help_image, (15, 38))
-
-    # ----- keyboard, mouse and the main loop -----
 
     def handle_event(self, event: pygame.event.Event, replay: Replay) -> None:
         """React to one event of the window.

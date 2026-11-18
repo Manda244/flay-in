@@ -7,8 +7,8 @@ from parser import MapParser, ParseError
 from renderer import TerminalRenderer
 from simulation import Simulation, SimulationError
 
-OPTIONS = ("--visual", "--gui")
-USAGE = "Usage: python3 main.py <map_file> [--visual] [--gui]"
+OPTIONS = ("--gui",)
+USAGE = "Usage: python3 main.py <map_file> [--gui]"
 
 
 def main() -> None:
@@ -27,9 +27,6 @@ def main() -> None:
     except (ParseError, SimulationError) as error:
         print(f"Error: {error}")
         sys.exit(1)
-    if "--visual" in flags:
-        renderer.show_map(fly_map)
-        print()
     for line in lines:
         print(renderer.color_line(line, fly_map))
     if "--gui" in flags:

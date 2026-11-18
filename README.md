@@ -1,241 +1,254 @@
-*This project has been created as part of the 42 curriculum by marasolo.*
+*This project has been created as part of the 42 curriculum by <login1>[, <login2>[, <login3>]].*
 
 # Fly-in
 
 ## Description
 
-Fly-in routes a fleet of drones from a start zone to an end zone through a
-network of connected zones, in as few simulation turns as possible.
+**Fly-in** routes a fleet of drones from a start zone to an end zone across a graph of zones and connections, in as few turns as possible.
 
-The program reads a map file, builds the graph by hand (no graph library),
-finds paths, and simulates the flight turn by turn. A zone has a type
-(`normal`, `priority`, `restricted` or `blocked`) and a capacity
-(`max_drones`). A connection is bidirectional and has a capacity
-(`max_link_capacity`). Entering a `restricted` zone costs 2 turns: the drone
-is in flight on the connection during the first turn and must land during
-the second one.
+The program reads a map file, computes a path for every drone, simulates the flight turn by turn and prints one line per turn. Several rules constrain the movements:
 
-The project is written in Python 3.10+ (developed with 3.13), is fully
-object-oriented, passes `flake8`, and is type-checked with `mypy`.
+- **Zone capacity** (`max_drones`): a zone can only hold a limited number of drones at the same time (the start and end zones are unlimited).
+- **Connection capacity** (`max_link_capacity`): a connection can only be used by a limited number of drones during one turn.
+- **Zone types**:
+  - `normal`: entered in 1 turn;
+  - `priority`: entered in 1 turn, preferred zone;
+  - `restricted`: entered in 2 turns (the drone is in flight for one turn);
+  - `blocked`: nobody can enter it.
+
+The project contains a parser with strict validation, a simulation engine, an independent output validator, a colored terminal output and an optional graphical replay built with pygame.
+
+### Project structure
+
+| File | Role |
+|---|---|
+| `main.py` | Entry point: parses arguments, runs the pipeline, prints the result |
+| `parser.py` | `MapParser`: reads and validates the map file |
+| `fly_map.py` | `FlyMap`: the graph (zones, connections, adjacency lists) |
+| `zone.py` | `Zone` and `ZoneType` |
+| `connection.py` | `Connection`: an undirected link with a capacity |
+| `drone.py` | `Drone`: position, path and flight state |
+| `pathfinder.py` | `PathFinder`: computes the paths of the drones |
+| `simulation.py` | `Simulation`: turn-by-turn engine and strategy selection |
+| `validator.py` | `OutputValidator`: replays an output and checks every rule |
+| `renderer.py` | `TerminalRenderer`: colored terminal output |
+| `gui.py` | `GraphicRenderer` and `Replay`: pygame visualization |
 
 ## Instructions
 
-Requirements: Python 3.10 or later and `pip`.
+### Requirements
 
-~~~
-make install                      # install flake8, mypy and pytest
-make run                          # run on maps/subject_example.txt
-make run MAP=maps/diamond.txt     # choose another map
-make run ARGS=--visual            # describe the map before the turns
-make run ARGS=--gui                 # open the pygame window
-make level LEVEL=easy              # pick a map of a level
-make test                         # run the unit tests (pytest)
-make lint                         # flake8 and mypy
-make lint-strict                  # flake8 and mypy --strict (optional)
-make debug                        # run with the Python debugger (pdb)
-make clean                        # remove caches
-~~~
+- Python 3.10 or later (the code uses the `X | None` syntax).
+- `pygame`, only for the optional `--gui` mode.
 
-Without `make`: `python3 main.py <map_file> [--visual]`.
+### Installation
+
+```bash
+python3 -m pip install pygame
+```
+
+### Execution
+
+```bash
+python3 main.py <map_file> [--gui]
+```
+
+- `<map_file>`: path to a map file (exactly one is required).
+- `--gui`: also opens the graphical replay after printing the turns.
+
+On an invalid map, or when no solution exists, the program prints `Error: <message>` and exits with status 1.
 
 ### Map file format
 
-~~~
+```
+# This is a comment
 nb_drones: 5
 start_hub: hub 0 0 [color=green]
-end_hub: goal 10 10 [color=yellow]
-hub: roof1 3 4 [zone=restricted color=red]
-hub: corridorA 4 3 [zone=priority max_drones=2]
-connection: hub-roof1
-connection: hub-corridorA [max_link_capacity=2]
-~~~
+hub: roof1 3 4 [zone=restricted max_drones=2]
+end_hub: goal 10 10 [color=red]
+connection: hub-roof1 [max_link_capacity=2]
+connection: roof1-goal
+```
 
-Metadata in brackets is optional. Lines starting with `#` are comments. Zone
-names cannot contain dashes or spaces. Any error stops the program with a
-message giving the line and the cause.
+Rules enforced by the parser:
+
+- `nb_drones` must be defined first, once, and be a positive integer.
+- Exactly one `start_hub` and one `end_hub`; neither can be `blocked`.
+- Zone line: `<name> <x> <y> [metadata]`. Names are unique, cannot contain `-`, and two zones cannot share the same coordinates.
+- Zone metadata: `zone` (`normal`, `blocked`, `restricted`, `priority`), `color`, `max_drones` (positive integer, default 1).
+- Connection line: `<zone1>-<zone2> [metadata]`. Both zones must already exist, a zone cannot be linked to itself, and `a-b` and `b-a` are the same connection.
+- Connection metadata: `max_link_capacity` (positive integer, default 1).
+- Blank lines and lines starting with `#` are ignored.
+- Every error is reported with its line number.
 
 ## Algorithm choices and implementation strategy
 
-**Parsing.** `MapParser` reads the file line by line and checks every rule
-of the subject (first line, unique start and end, unique names, integer
-coordinates, positive capacities, no duplicate connection, valid zone types).
-Errors are raised as `ParseError` with the line number.
+### Overview
 
-**Graph.** `FlyMap` stores the zones, the connections and an adjacency list:
-a dictionary that gives, for each zone name, the connections touching it.
-It is built once. The neighbors of a zone are found with
-`Connection.other_end`, in time proportional to the number of its
-connections.
+The problem is a multi-agent routing problem on a capacitated graph. Instead of looking for a single exact solution, the program **generates several candidate path plans, simulates each one, and keeps the fastest**.
 
-**Pathfinding.** `PathFinder.find_cheapest_path` is a Dijkstra search with a
-priority queue (`heapq`). The cost of a move is the number of turns needed
-to enter the destination zone (1, or 2 for `restricted`). Blocked zones are
-never entered. A priority zone costs 1 turn like a normal one, but when two
-paths take the same number of turns, the one with more priority zones wins
-(the heap compares the pair `(turns, score)`). Complexity: O((V + E) log V)
-time and O(V) memory. A simple BFS (`find_path`) is also kept: it counts
-steps, not turns, so it can choose a slower path when a restricted zone is
-involved.
+```
+map file -> MapParser -> FlyMap -> Simulation.run() -> one text line per turn
+                                       |-- PathFinder.plan_paths(...)  (one plan per strategy)
+                                       `-- Simulation.step()           (turn-by-turn engine)
+```
 
-**Several paths.** To avoid a traffic jam on a single path,
-`PathFinder.find_paths` finds the cheapest path, bans its intermediate zones,
-and searches again, until no path is left. `plan_paths` then assigns each
-drone to the path where it is expected to arrive first (path cost plus the
-number of drones already sent on it). This greedy method is simple and
-fast, O(k (V + E) log V + N k) for k paths and N drones, but it is not always
-optimal: the first path is chosen alone. A maximum-flow algorithm would be
-the rigorous improvement.
+### Path planning (`PathFinder`)
 
-**Simulation.** `Simulation.step` plays one turn:
-1. drones already in flight land (they cannot wait on a connection);
-2. the other drones are examined from the most advanced to the least
-   advanced, so a drone that leaves a zone frees its place in the same turn;
-3. a move is accepted only if the destination zone and the connection both
-   have room; counters are updated as moves are accepted;
-4. a drone going to a `restricted` zone takes off, and its place in the
-   destination zone is reserved immediately;
-5. if no drone can move while some are not delivered, a `SimulationError`
-   is raised (deadlock guard).
+`PathFinder.plan_paths(nb_drones, penalty, spacing_aware)` returns one path (a list of zones from start to end) for each drone. Two parameters control how the paths are spread:
 
-Paths are computed once before the simulation, not at every turn. The
-per-turn counters are rebuilt each turn in O(N).
+- `penalty`: the extra cost applied to a zone already used by another path. `None` forbids sharing zones, so the paths are disjoint. A number allows sharing at that price, which spreads the drones over several routes when a single route would be a bottleneck.
+- `spacing_aware`: when `True`, the planner estimates the number of turns that separate two drones using the same path, so that the cost of a shared route reflects the queue it creates.
+
+The cost of entering a zone comes from `Zone.cost()`: 2 for a restricted zone, 1 otherwise. Blocked zones are never entered.
+
+### Strategy selection (`Simulation.run`)
+
+`Simulation.PLANS` lists the strategies that are tried:
+
+```
+(None, False)                          no zone shared between paths
+(1, True), (2, True), (3, True),
+(6, True), (10, True), (20, True)      sharing allowed, with growing penalties
+```
+
+For each strategy, `play()` resets the drones, plans the paths and simulates the whole flight. `run()` keeps the result with the **fewest turns** (the first one in case of a tie). If a strategy ends in a deadlock it is skipped; if there is no path at all, the error is raised immediately; if no strategy works, the first error is reported.
+
+### Turn engine (`Simulation.step`)
+
+Each turn has two phases:
+
+1. **Landings**: every drone that was in flight lands in its destination zone and uses its connection.
+2. **Moves**: the other drones are processed from the most advanced on its path to the least advanced (ties broken by drone number). Making the head of the convoy move first frees room for the drones behind it. A drone moves only if the target zone has room **and** the connection is not full.
+   - Normal or priority target: the drone moves immediately (`D1-a`).
+   - Restricted target: the drone takes off and lands next turn (`D2-s-r`, then `D2-r`).
+
+A drone in flight is counted in its destination zone, so its place is reserved. If a whole turn produces no movement while some drones are not delivered, the simulation reports a deadlock.
+
+### Independent validation (`OutputValidator`)
+
+`validator.py` replays an output line by line without using the simulation logic. It checks that drones exist and move once per turn, that connections exist, that blocked and restricted zones are handled correctly, that flights end with the announced landing, that zone and connection capacities are respected, and that all drones are delivered. This catches simulation bugs instead of repeating them.
+
+### Design choices
+
+- **Separation of concerns**: parsing, graph, planning, simulation, validation and display are independent modules.
+- **Fail-fast parsing** with explicit messages and line numbers.
+- **Multi-strategy search** as a compromise between solution quality and complexity.
+- **Adjacency lists** in `FlyMap` for fast neighbor lookups.
 
 ## Visual representation
 
-The output is colored in the terminal with ANSI codes: each movement takes
-the `color` of its destination zone, so it is easy to see where each drone
-goes. With `--visual`, the program first prints a description of the map
-(zones with type, capacity and position; connections with capacity).
-Colors are disabled automatically when the output is not a terminal
-(file, pipe), so the text always follows the format of the subject. A color
-name that is not known is printed without color.
+### Colored terminal output
 
-### Graphical mode
+Each movement in a turn line is colored with the `color` of its **destination zone**, as defined in the map file. Colors are enabled only when the output is a real terminal, so redirected output stays free of escape codes.
 
-`make run ARGS=--gui` opens a pygame window after the simulation. Each zone
-is a honeycomb cell filled with its `color`, with a small badge that
-shows how many drones it can hold (an infinity sign for the start and
-end zones). The border shows the type of the
-zone (gold: priority, red: restricted, black: blocked) and the thickness of a
-connection shows its capacity. The drones are robot bees that fly from cell
-to cell, turn after turn, the queen waits on the end zone, and a counter shows
-the delivered drones. Keys: SPACE plays the next turn, A starts or stops the automatic
-replay, R restarts it, M opens a list to choose a
-map (N and P load the next or the previous one), ESC quits. The mouse wheel (or + and -) zooms in, the arrow keys move the view when it is
-zoomed in, and the window can be resized.
-If the images of `assets/` are missing, simple shapes are drawn
-instead. `pygame` is only used for the display (`make install` installs it).
+### Graphical replay (`--gui`)
 
-## Example input and output
+A resizable pygame window replays the simulation:
 
-Input (`maps/subject_example.txt`, 5 drones):
+- zones are drawn as hexagons, colored by their `color` metadata, with a border showing the type (gold: priority, red: restricted, black: blocked);
+- a badge shows the capacity of each zone;
+- the thickness of a connection reflects its `max_link_capacity`;
+- drones are animated smoothly between turns, spread out when several are in the same zone, and shown halfway along the link while in flight;
+- a status bar shows the map name, the current turn, the number of delivered drones and the zoom level;
+- the view scales to the window and supports zoom and panning for large maps.
 
-~~~
-nb_drones: 5
-start_hub: hub 0 0 [color=green]
-end_hub: goal 10 10 [color=yellow]
-hub: roof1 3 4 [zone=restricted color=red]
-hub: roof2 6 2 [zone=normal color=blue]
-hub: corridorA 4 3 [zone=priority color=green max_drones=2]
-hub: tunnelB 7 4 [zone=normal color=red]
-hub: obstacleX 5 5 [zone=blocked color=gray]
-connection: hub-roof1
-connection: hub-corridorA
-connection: roof1-roof2
-connection: roof2-goal
-connection: corridorA-tunnelB [max_link_capacity=2]
-connection: tunnelB-goal
-~~~
+| Key | Action |
+|---|---|
+| `SPACE` | Play the next turn |
+| `A` | Toggle automatic replay |
+| `R` | Restart from turn 0 |
+| Mouse wheel, `+` / `-` | Zoom |
+| Arrow keys | Move the view when zoomed |
+| `ESC` | Quit |
 
-Output (6 turns, one line per turn; `D3-hub-roof1` means that D3 is in flight
-on the connection hub-roof1):
+These features make the behavior of the algorithm easy to follow: bottlenecks, queues and the use of alternative routes are visible instead of being read from text only.
 
-~~~
-D1-corridorA D3-hub-roof1
-D1-tunnelB D2-corridorA D3-roof1
-D1-goal D2-tunnelB D3-roof2 D4-corridorA D5-hub-roof1
-D2-goal D3-goal D4-tunnelB D5-roof1
-D4-goal D5-roof2
-D5-goal
-~~~
+## Example
 
-## Assumptions and limitations
+### Example 1: simple corridor
 
-The subject does not specify everything. The choices made are:
-- a drone in flight is printed as `D<ID>-<zone1>-<zone2>` (the connection);
-- the connection of a flight counts for both turns of the flight;
-- the place in a restricted destination zone is reserved at take-off;
-- unknown metadata keys are a parsing error;
-- only lines that start with `#` are comments;
-- `max_drones` on the start and end zones is validated like on other zones,
-  although the subject says it is ignored there.
+Input (`corridor.txt`):
 
-## Project structure
+```
+nb_drones: 2
+start_hub: start 0 0 [color=green]
+hub: a 1 0 [color=blue]
+hub: b 2 0 [color=yellow]
+end_hub: goal 3 0 [color=red]
+connection: start-a
+connection: a-b
+connection: b-goal
+```
 
-~~~
-main.py              entry point
-zone.py               Zone and ZoneType
-connection.py         Connection
-fly_map.py            FlyMap (graph with adjacency lists)
-parser.py             MapParser and ParseError
-pathfinder.py         PathFinder (BFS, Dijkstra, several paths)
-drone.py              Drone
-simulation.py         Simulation and SimulationError
-renderer.py           TerminalRenderer
-gui.py                GraphicRenderer (pygame window)
-validator.py          OutputValidator (checks the outputs)
-assets/              bee and queen images
-maps/                example and test maps
-tests/               pytest unit tests
-~~~
+Command:
+
+```bash
+python3 main.py corridor.txt
+```
+
+Expected output:
+
+```
+D1-a
+D1-b D2-a
+D1-goal D2-b
+D2-goal
+```
+
+Zones `a` and `b` hold one drone at a time, so the drones follow each other: 4 turns.
+
+### Example 2: restricted zone
+
+Input (`restricted.txt`):
+
+```
+nb_drones: 1
+start_hub: s 0 0
+hub: r 1 0 [zone=restricted]
+end_hub: g 2 0
+connection: s-r
+connection: r-g
+```
+
+Expected output:
+
+```
+D1-s-r
+D1-r
+D1-g
+```
+
+The drone takes off toward `r` on turn 1, lands on turn 2, and reaches `g` on turn 3.
+
+### Example 3: invalid map
+
+```
+nb_drones: 0
+```
+
+```
+Error: line 1: nb_drones must be positive, got 0
+```
 
 ## Resources
 
-- Breadth-first search: https://en.wikipedia.org/wiki/Breadth-first_search
+### References
+
+- Python documentation: https://docs.python.org/3/
+- pygame documentation: https://www.pygame.org/docs/
 - Dijkstra's algorithm: https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm
-- Python `heapq`: https://docs.python.org/3/library/heapq.html
-- Python `collections.deque`:
-  https://docs.python.org/3/library/collections.html#collections.deque
-- PEP 257, docstring conventions: https://peps.python.org/pep-0257/
-- `mypy` documentation: https://mypy.readthedocs.io
-- `flake8` documentation: https://flake8.pycqa.org
-- `pytest` documentation: https://docs.pytest.org
-- `pygame` documentation: https://www.pygame.org/docs/
+- Maximum flow and flow networks: https://en.wikipedia.org/wiki/Maximum_flow_problem
+- Multi-agent pathfinding: https://en.wikipedia.org/wiki/Multi-agent_pathfinding
 - ANSI escape codes: https://en.wikipedia.org/wiki/ANSI_escape_code
+- PEP 8 and PEP 257 (style and docstrings): https://peps.python.org/pep-0008/
 
-### How AI was used
+### Use of AI
 
-An AI assistant (Claude, by Anthropic) was used as a step-by-step tutor:
-- to explain the subject, graphs, BFS, Dijkstra and the turn-based
-  simulation with small examples;
-- to propose the class architecture and to write small pieces of code, each
-  explained before it was used;
-- to help diagnose errors (indentation, `mypy` messages, test failures);
-- to draft the tests, the `Makefile`, the output validator, the
-  pygame display and this README;
-- to remove the background of the two images of `assets/`, which
-  were provided by the author.
+AI was used as an assistant for the following tasks:
 
-Every piece of code was run and checked with `flake8`, `mypy` and `pytest`,
-and was read and understood by the author before being kept.
+- explaining the structure and behavior of the existing modules (parser, simulation, validator, graph classes, renderer, GUI);
+- reviewing the code and pointing out possible improvements;
+- drafting this README.
 
-## Performance
-
-Number of turns on the maps given with the subject (target in parentheses):
-
-| Level | Map | Drones | Target | Result |
-|---|---|---|---|---|
-| Easy | linear_path | 2 | <= 6 | 4 |
-| Easy | simple_fork | 4 | <= 8 | 6 |
-| Easy | basic_capacity | 4 | <= 6 | 4 |
-| Medium | dead_end_trap | 5 | <= 12 | 8 |
-| Medium | circular_loop | 6 | <= 15 | 15 |
-| Medium | priority_puzzle | 5 | <= 12 | 8 |
-| Hard | maze_nightmare | 8 | <= 30 | 13 |
-| Hard | capacity_hell | 12 | <= 35 | 16 |
-| Hard | ultimate_challenge | 15 | <= 45 | 26 |
-| Challenger | impossible_dream | 25 | record: 45 | 67 |
-
-The challenger map is not solved better than the reference record: the
-greedy choice of paths is not optimal, and a maximum-flow approach would be
-the next improvement.
+All code was written, tested and understood by the authors. <!-- Adjust this section so it matches how AI was really used in your project. -->

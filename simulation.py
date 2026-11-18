@@ -15,7 +15,10 @@ class SimulationError(Exception):
 class Simulation:
     """Move all the drones from the start zone to the end zone."""
 
-    PLANS: tuple[Plan, ...] = ((None, False), (2, True), (6, True), (20, True))
+    PLANS: tuple[Plan, ...] = (
+        (None, False), (1, True), (2, True), (3, True),
+        (6, True), (10, True), (20, True),
+    )
 
     def __init__(self, fly_map: FlyMap) -> None:
         """Create the drones, all waiting in the start zone.
@@ -183,7 +186,9 @@ class Simulation:
         return [text for _, text in moves]
 
     def play(
-        self, penalty: int | None = None, spacing_aware: bool = False
+        self,
+        penalty: int | None = None,
+        spacing_aware: bool = False,
     ) -> list[str]:
         """Play a whole simulation with one way of choosing the paths.
 

@@ -41,8 +41,3 @@ class Connection:
         if zone == self.zone_b:
             return self.zone_a
         raise ValueError("Zone not part of this connection.")
-
-    def __repr__(self) -> str:
-        """Return a readable representation of the connection."""
-        return f"Connection(zone_a={self.zone_a}, zone_b={self.zone_b}, " \
-               f"max_link_capacity={self.max_link_capacity})"

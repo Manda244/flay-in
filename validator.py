@@ -66,7 +66,10 @@ class OutputValidator:
         for turn, line in enumerate(lines, start=1):
             self.check_turn(turn, line, place, flying)
         end = self.fly_map.end.name
-        late = [d for d, zone in place.items() if zone != end or d in flying]
+        late = [
+            drone for drone, zone in place.items()
+            if zone != end or drone in flying
+            ]
         if late:
             raise ValidationError(f"{len(late)} drones not delivered")
         return len(lines)

@@ -318,7 +318,10 @@ class MapParser:
             raise ParseError(f"unknown keyword '{prefix}'", line_number)
 
     def parse(self) -> FlyMap:
-        """Read the whole map file and fill the parser attributes.
+        """Read the whole map file and build the map.
+
+        Returns:
+            The map described by the file.
 
         Raises:
             ParseError: If the file cannot be read or contains an error.

@@ -36,17 +36,6 @@ class FlyMap:
             self.adjacency[connection.zone_a.name].append(connection)
             self.adjacency[connection.zone_b.name].append(connection)
 
-    def connections_of(self, zone: Zone) -> list[Connection]:
-        """Return the connections that touch a zone.
-
-        Args:
-            zone: The zone to look at.
-
-        Returns:
-            The list of connections of this zone.
-        """
-        return self.adjacency[zone.name]
-
     def neighbors(self, zone: Zone) -> list[Zone]:
         """Return the zones directly connected to a zone.
 

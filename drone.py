@@ -50,7 +50,3 @@ class Drone:
             raise ValueError(f"{self.name} has no next zone")
         self.path_index += 1
         self.position = next_zone
-
-    def __repr__(self) -> str:
-        """Return a readable representation of the drone."""
-        return f"Drone({self.name}, at {self.position.name})"
